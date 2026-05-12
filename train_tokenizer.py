@@ -28,14 +28,11 @@ if __name__ == "__main__":
 
     os.makedirs(tmp_folder, exist_ok=True)
     ftr = []
-    for idx, (start, end) in enumerate(all_boundaries):
-        tmp_file = f"{tmp_folder}corp_part_{idx}.tmp"
-        ftr.append(pool.submit(process_one_chunk, training_file, start, end, "<|endoftext|>", tmp_file))
+    for start, end in all_boundaries:
+        ftr.append(pool.submit(process_one_chunk, training_file, start, end, "<|endoftext|>"))
 
     for ft in as_completed(ftr):
-        cnt_part, tmp_file = ft.result()
-        with open(tmp_file, "r") as f:
-            single_corp: dict = json.loads(f.read())
+        single_corp = ft.result()
         for w, c in single_corp.items():
             if w not in corpus:
                 corpus[w] = c

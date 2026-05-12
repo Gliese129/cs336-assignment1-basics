@@ -64,9 +64,9 @@ def find_chunk_boundaries(
 #             corp[word] += 1
 #     return corp
 
-def process_one_chunk(file: str, start: int, end: int, special_token: str, tmp_file: str) -> Tuple[int, str]:
+def process_one_chunk(file: str, start: int, end: int, special_token: str) -> dict:
     cnt = 0
-    with open(file, "rb") as fin, open(tmp_file, "w") as fout:
+    with open(file, "rb") as fin:
         fin.seek(start)
         chunk = fin.read(end - start).decode("utf-8", errors="ignore")
         chunk = chunk.replace(special_token, "")
@@ -78,5 +78,4 @@ def process_one_chunk(file: str, start: int, end: int, special_token: str, tmp_f
                 cnt += 1
             else:
                 corp[word] += 1
-        json.dump(corp, fout)
-    return cnt, tmp_file
+    return corp
