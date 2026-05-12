@@ -1,7 +1,9 @@
+import json
 import os
 import regex as re
-from typing import BinaryIO
+from typing import BinaryIO, Tuple
 
+import json
 
 PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
 
@@ -51,13 +53,30 @@ def find_chunk_boundaries(
     # Make sure all boundaries are unique, but might be fewer than desired_num_chunks
     return sorted(set(chunk_boundaries))
 
-def process_one_chunk(chunk_: str, special_token: str) -> dict[str, int]:
-    chunk_ = chunk_.replace(special_token, "")
-    corp = {}
-    for match in re.finditer(PAT, chunk_):
-        word = match[0]
-        if word not in corp:
-            corp[word] = 1
-        else:
-            corp[word] += 1
-    return corp
+# def process_one_chunk(chunk_: str, special_token: str) -> dict[str, int]:
+#     chunk_ = chunk_.replace(special_token, "")
+#     corp = {}
+#     for match in re.finditer(PAT, chunk_):
+#         word = match[0]
+#         if word not in corp:
+#             corp[word] = 1
+#         else:
+#             corp[word] += 1
+#     return corp
+
+def process_one_chunk(file: str, start: int, end: int, special_token: str, tmp_file: str) -> Tuple[int, str]:
+    cnt = 0
+    with open(file, "rb") as fin, open(tmp_file, "w") as fout:
+        fin.seek(start)
+        chunk = fin.read(end - start).decode("utf-8", errors="ignore")
+        chunk = chunk.replace(special_token, "")
+        corp = {}
+        for match in re.finditer(PAT, chunk):
+            word = match[0]
+            if word not in corp:
+                corp[word] = 1
+                cnt += 1
+            else:
+                corp[word] += 1
+        json.dump(corp, fout)
+    return cnt, tmp_file
