@@ -1,12 +1,8 @@
-import json
 import os
 import regex as re
 from typing import BinaryIO
-from concurrent.futures import ProcessPoolExecutor, as_completed
 
-training_file = "data/TinyStoriesV2-GPT4-train.txt"
-corpus_file = "data/corpus.txt"
-num_processes = 4
+
 PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
 
 def find_chunk_boundaries(
@@ -55,7 +51,7 @@ def find_chunk_boundaries(
     # Make sure all boundaries are unique, but might be fewer than desired_num_chunks
     return sorted(set(chunk_boundaries))
 
-def process(chunk_: str, special_token: str) -> dict[str, int]:
+def process_one_chunk(chunk_: str, special_token: str) -> dict[str, int]:
     chunk_ = chunk_.replace(special_token, "")
     corp = {}
     for match in re.finditer(PAT, chunk_):
@@ -65,31 +61,3 @@ def process(chunk_: str, special_token: str) -> dict[str, int]:
         else:
             corp[word] += 1
     return corp
-
-
-if __name__ == "__main__":
-    corpus = {}
-
-    with open(training_file, "rb") as f, ProcessPoolExecutor(max_workers=num_processes) as pool:
-
-        boundaries = find_chunk_boundaries(f, num_processes, b"<|endoftext|>")
-
-        # The following is a serial implementation, but you can parallelize this
-        # by sending each start/end pair to a set of processes.
-        ftr = []
-        for start, end in zip(boundaries[:-1], boundaries[1:]):
-            f.seek(start)
-            chunk = f.read(end - start).decode("utf-8", errors="ignore")
-            # Run pre-tokenization on your chunk and store the counts for each pre-token
-            ftr.append(pool.submit(process, chunk, "<|endoftext|>"))
-
-        for ft in as_completed(ftr):
-            single_res = ft.result()
-            for w, c in single_res:
-                if w not in corpus:
-                    corpus[w] = c
-                else:
-                    corpus[w] += c
-
-    with open(corpus_file, "w") as f:
-        json.dump(corpus, f)
