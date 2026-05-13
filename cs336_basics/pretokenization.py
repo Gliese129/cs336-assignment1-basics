@@ -62,16 +62,17 @@ def process_one_chunk(file: str, start: int, end: int, special_token: str) -> di
     cnt = 0
     with open(file, "rb") as fin:
         fin.seek(start)
-        chunk = fin.read(end - start).decode("utf-8", errors="ignore")
-        chunk = chunk.replace(special_token, "")
+        text = fin.read(end - start).decode("utf-8", errors="ignore")
+        chunks = text.split(special_token)
         corp = {}
-        for match in re.finditer(PAT, chunk):
-            word = match[0]
-            if word not in corp:
-                corp[word] = 1
-                cnt += 1
-            else:
-                corp[word] += 1
+        for chunk in chunks:
+            for match in re.finditer(PAT, chunk):
+                word = match[0]
+                if word not in corp:
+                    corp[word] = 1
+                    cnt += 1
+                else:
+                    corp[word] += 1
     return corp
 
 

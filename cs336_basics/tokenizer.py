@@ -38,56 +38,75 @@ def train_bpe(input_path: str, vocab_size: int, special_tokens: list[str]) -> Tu
     merge_record = []
     class PairRecord(TypedDict):
         cnt: int
-        usage: set[tuple[int]]
+        usage: set[tuple[int, ...]]
 
-    corpus: dict[tuple[int], int] = {
-        tuple(w.encode("utf-8")): c
-        for w, c in corpus_.items()
-    }
-    cnt = len(special_tokens)
-    cnt += 256
+    corpus: dict[tuple[int, ...], int] = {}
+    vocab: dict[int, bytes] = {}
+
+    for i, st in enumerate(special_tokens):
+        vocab[i] = st.encode("utf-8")
+    for i in range(256):
+        vocab[len(special_tokens)+i] = bytes([i])
+    # build corpus based on current vocab
+    for w, c in corpus_.items():
+        k = tuple(len(special_tokens) + b for b in w.encode("utf-8"))
+        corpus[k] = c
     # merge
-    while cnt < vocab_size:
-        records: dict[Tuple[int, int], PairRecord] = {}
-        for w, c in corpus.items():
-            for i in range(len(w) - 1):
-                p = (w[i], w[i+1])
-                if p not in records:
-                    records[p] = {
-                        'cnt': 0,
-                        'usage': set()
-                    }
-                records[p]['cnt'] += c
-                records[p]['usage'].add(w)
+    # build once
+    records: dict[Tuple[int, int], PairRecord] = {}
+    for w, c in corpus.items():
+        for i in range(len(w) - 1):
+            p = (w[i], w[i+1])
+            if p not in records:
+                records[p] = {
+                    'cnt': 0,
+                    'usage': set()
+                }
+            records[p]['cnt'] += c
+            records[p]['usage'].add(w)
+    while len(vocab) < vocab_size:
         best_pair, best_record = max(
             records.items(),
-            key=lambda item: (item[1]["cnt"], item[0])
+            key=lambda item: (item[1]["cnt"], vocab[item[0][0]], vocab[item[0][1]])
         )
         merge_record.append(best_pair)
-        for w_old in records[best_pair]['usage']:
+        # update corpus and records
+        affected_words = records[best_pair]['usage'].copy()
+        new_id = len(vocab)
+        for w_old in affected_words:
+            old_cnt = corpus[w_old]
+            # remove old
+            for i in range(len(w_old)-1):
+                p = (w_old[i], w_old[i+1])
+                records[p]["usage"].discard(w_old)
+                records[p]["cnt"] -= old_cnt
+                if records[p]["cnt"] <= 0:
+                    del records[p]
+            # build new word
             w_new = []
-            for i in range(len(w_old) - 1):
-                if (w_old[i], w_old[i+1]) == best_pair:
-                    w_new.append(cnt)
+            i = 0
+            while i < len(w_old):
+                if i < len(w_old) - 1 and (w_old[i], w_old[i+1]) == best_pair:
+                    w_new.append(new_id)
+                    i += 2
                 else:
                     w_new.append(w_old[i])
-            corpus[tuple(w_new)] = corpus[w_old]
+                    i += 1
+            w_new = tuple(w_new)
+            # update corpus
+            corpus[w_new] = corpus.get(w_new, 0) + old_cnt
             del corpus[w_old]
-        cnt += 1
-    # rebuild vocab
-    vocab: dict[int, bytes] = {}
-    l = 0
-    for st in special_tokens:
-        vocab[l] = st.encode("utf-8")
-        l += 1
-    for _ in range(256):
-        vocab[l] = bytes([i])
-        l += 1
-    for r in merge_record:
-        # in order, there will not be further id appear before its idx
-        a, b = vocab[r[0]], vocab[r[1]]
+            # update records
+            for i in range(len(w_new)-1):
+                p = (w_new[i], w_new[i+1])
+                if p not in records:
+                    records[p] = PairRecord(cnt=0, usage=set())
+                records[p]["cnt"] += old_cnt
+                records[p]["usage"].add(w_new)
+        # add to vocab
+        a, b = vocab[best_pair[0]], vocab[best_pair[1]]
+        l = len(vocab)
         vocab[l] = a + b
-        l += 1
 
     return vocab, [
         (vocab[r[0]], vocab[r[1]]) for r in merge_record
